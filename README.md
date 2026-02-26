@@ -1,81 +1,159 @@
-# 🔒 App Security Audit — AI Agent Skill
+# 🔒 App Security Audit
 
-Comprehensive security audit skill for AI coding agents. Point it at your project and get actionable findings across your entire stack.
+A security scanner and AI agent skill that audits your web app, Supabase project, database, mobile app, or API for common vulnerabilities.
 
-## What It Covers
+**Two ways to use it:**
+1. **Standalone scanner** — Run the bash script directly on any project (zero dependencies)
+2. **AI agent skill** — Drop it into Claude Code, OpenClaw, Codex CLI, or any AI agent that reads SKILL.md files for a guided, thorough audit
 
-| Area | Checks |
-|------|--------|
-| **Supabase** | RLS policies, storage buckets, edge function JWT verification, service key exposure, realtime security |
-| **Web Apps** | XSS, CORS, CSP headers, secret exposure in bundles, auth token storage, dependency vulnerabilities |
-| **Mobile Apps** | Hardcoded secrets, secure storage (Keychain/Keystore), cert pinning, deep link validation, Expo/RN specifics |
-| **Databases** | Connection security, least privilege, SQL injection vectors, backup encryption, parameterized queries |
-| **APIs** | Auth on all endpoints, rate limiting, input validation, error leakage, OWASP Top 10 |
+---
 
-## Quick Start
+## Option 1: Just Run the Scanner (No AI Required)
 
-### Automated Scanner (zero dependencies)
+The scanner is a standalone bash script. No installs, no dependencies — just bash and grep.
 
 ```bash
-bash scripts/scan_project.sh /path/to/your/project
+# Clone it
+git clone https://github.com/behever/app-security-audit.git
+
+# Run it on your project
+bash app-security-audit/scripts/scan_project.sh /path/to/your/project
 ```
 
-Outputs a categorized report: **CRITICAL** / **WARNING** / **INFO**
-
-### As an AI Agent Skill
-
-Install into your AI agent's skills directory:
+That's it. You'll get a report like this:
 
 ```
-skills/
-└── app-security-audit/
-    ├── SKILL.md
-    ├── references/
-    │   ├── supabase-security.md
-    │   ├── web-app-security.md
-    │   ├── mobile-app-security.md
-    │   ├── database-security.md
-    │   └── api-security.md
-    └── scripts/
-        └── scan_project.sh
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔒 App Security Audit Scanner
+  Project: my-app
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+── 1. HARDCODED SECRETS ──
+
+── 2. ENVIRONMENT VARIABLE EXPOSURE ──
+
+── 3. XSS VULNERABILITIES ──
+🔴 CRITICAL: dangerouslySetInnerHTML found
+   src/components/Comment.tsx:42
+
+── 5. CORS CONFIGURATION ──
+🟡 WARNING: Wildcard CORS origin (*) found
+   api/middleware.ts:8
+
+── 7. API SECURITY ──
+🟡 WARNING: No rate limiting library detected
+
+  📊 SCAN SUMMARY
+  CRITICAL: 1
+  WARNING:  2
+  INFO:     4
 ```
 
-Compatible with:
-- [OpenClaw](https://github.com/nicobailey/openclaw)
-- Claude Code / Codex CLI
-- Any agent that reads SKILL.md files
+### What the Scanner Checks
 
-## How It Works
+| Check | What It Looks For |
+|-------|-------------------|
+| **Hardcoded secrets** | API keys, passwords, tokens committed to source |
+| **Env exposure** | `.env` files in public/dist directories |
+| **XSS** | `dangerouslySetInnerHTML`, unsanitized inputs |
+| **Auth tokens** | Secrets stored in `localStorage` instead of secure cookies |
+| **CORS** | Wildcard `Access-Control-Allow-Origin: *` |
+| **Supabase RLS** | Tables without Row Level Security enabled |
+| **Bare auth.uid()** | Unoptimized RLS policies (should use `(select auth.uid())`) |
+| **Validation** | Missing input validation libraries (zod, yup, joi) |
+| **Rate limiting** | Missing rate limiting on API endpoints |
+| **Dependencies** | Runs `npm audit` for known vulnerabilities |
+| **Mobile** | Hardcoded secrets, insecure storage in React Native/Expo |
 
-1. **Automated scan** — `scan_project.sh` greps for common issues (exposed secrets, missing RLS, XSS patterns, weak CORS)
-2. **Decision tree** — SKILL.md guides the agent to the right reference files based on your stack
-3. **Deep dive** — Reference files contain specific grep patterns, SQL queries, and remediation steps
-4. **Report** — Structured output with severity levels and fix recommendations
+---
 
-## Example Findings
+## Option 2: Use as an AI Agent Skill
 
+If you use an AI coding agent (Claude Code, OpenClaw, Codex CLI, etc.), you can install this as a **skill** — a knowledge package that teaches the AI how to do thorough security audits on your behalf.
+
+### What's a Skill?
+
+A skill is a folder with a `SKILL.md` file that AI agents read to learn specialized workflows. Instead of just running a grep scanner, the AI will:
+
+- Read the detailed reference guides for your specific stack
+- Inspect your actual code, RLS policies, and auth implementation
+- Run the automated scanner AND do manual deep-dive analysis
+- Generate a prioritized report with specific fix recommendations
+- Optionally fix the issues for you
+
+### Installation
+
+**For Claude Code / Codex CLI:**
+```bash
+# Clone into your project's skills directory
+git clone https://github.com/behever/app-security-audit.git .claude/skills/app-security-audit
+
+# Or wherever your agent reads skills from
+git clone https://github.com/behever/app-security-audit.git skills/app-security-audit
 ```
-🔴 CRITICAL: Service role key found in client code
-   src/lib/api.js:12 — SUPABASE_SERVICE_ROLE_KEY exposed to browser
 
-🟡 WARNING: Wildcard CORS in edge function
-   supabase/functions/send-email/index.ts:3 — Access-Control-Allow-Origin: *
-
-🔵 INFO: No rate limiting library detected
-   Consider express-rate-limit, @upstash/ratelimit, or similar
+**For OpenClaw:**
+```bash
+# Clone into your OpenClaw skills directory
+git clone https://github.com/behever/app-security-audit.git ~/clawd/skills/app-security-audit
 ```
+
+Then just ask your AI agent: **"Run a security audit on this project"** — it will find the skill and follow the workflow.
+
+### What the AI Gets (That the Scanner Doesn't)
+
+The skill includes 5 detailed reference guides the AI reads based on your stack:
+
+| Reference File | When It's Used | What It Covers |
+|---|---|---|
+| `references/supabase-security.md` | Supabase projects | RLS policies, storage buckets, edge function JWT verification, service key exposure, realtime channels |
+| `references/web-app-security.md` | Web apps | XSS patterns, CORS config, CSP headers, auth token storage, dependency auditing |
+| `references/mobile-app-security.md` | React Native / Expo | Secure storage (Keychain/Keystore), cert pinning, deep link validation, OTA update security |
+| `references/database-security.md` | Any database | Connection security, least privilege, SQL injection, backup encryption |
+| `references/api-security.md` | APIs / backends | Auth on endpoints, rate limiting, input validation, error leakage, OWASP Top 10 |
+
+The AI reads only the guides relevant to your stack, so it doesn't waste context on things you don't use.
+
+---
 
 ## File Structure
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `SKILL.md` | 242 | Core workflow, decision tree, report template |
-| `references/supabase-security.md` | 400+ | RLS, storage, edge functions, realtime |
-| `references/web-app-security.md` | 350+ | XSS, CORS, CSP, auth, deps |
-| `references/mobile-app-security.md` | 300+ | Secure storage, cert pinning, deep links |
-| `references/database-security.md` | 250+ | Access control, injection, encryption |
-| `references/api-security.md` | 300+ | Auth, rate limiting, OWASP |
-| `scripts/scan_project.sh` | 435 | Automated scanner, bash only |
+```
+app-security-audit/
+├── SKILL.md                              # AI agent instructions (workflow + decision tree)
+├── scripts/
+│   └── scan_project.sh                   # Standalone scanner (run directly, no deps)
+└── references/
+    ├── supabase-security.md              # Supabase-specific checks
+    ├── web-app-security.md               # Web app security checks
+    ├── mobile-app-security.md            # Mobile app security checks
+    ├── database-security.md              # Database security checks
+    └── api-security.md                   # API security checks
+```
+
+## Examples
+
+### Audit a Next.js + Supabase project
+```bash
+bash scripts/scan_project.sh ~/my-saas-app
+```
+
+### Audit just your Supabase edge functions
+```bash
+bash scripts/scan_project.sh ~/my-app/supabase
+```
+
+### Ask your AI agent for a full audit
+> "Run the security audit skill on this project. Focus on Supabase RLS and the API endpoints."
+
+### Ask your AI agent to fix what it finds
+> "Audit this project for security issues and fix anything critical."
+
+---
+
+## Contributing
+
+Found a check that's missing? PRs welcome. The scanner is intentionally simple (bash + grep) so it runs anywhere without setup.
 
 ## License
 
