@@ -237,12 +237,18 @@ if [ -d "supabase/migrations" ]; then
     done
   done
   
-  # Bare auth.uid() without subselect
-  BARE_AUTH=$(grep -rn 'auth\.uid()' --include='*.sql' supabase/migrations/ 2>/dev/null | grep -v '(select auth\.uid()\|(SELECT auth\.uid()' | head -10)
+  # Bare auth.uid() without subselect (exclude comments and lines with select wrapper)
+  BARE_AUTH=$(grep -rn 'auth\.uid()' --include='*.sql' supabase/migrations/ 2>/dev/null | grep -v '(select auth\.uid()\|(SELECT auth\.uid()' | grep -v '\-\-.*auth\.uid()' | head -10)
   if [ -n "$BARE_AUTH" ]; then
-    echo "$BARE_AUTH"
-    warning "Bare auth.uid() found in SQL — use (select auth.uid()) for performance" \
-      "Bare calls evaluate per-row; subselect caches per-query (100x+ faster)"
+    # Check if there's a best-practices/fix migration that addresses these
+    FIX_MIGRATION=$(grep -rl 'select auth\.uid()\|SELECT auth\.uid()' --include='*.sql' supabase/migrations/ 2>/dev/null | grep -i 'best.practice\|fix.*auth\|rls.*perf' | head -1)
+    if [ -n "$FIX_MIGRATION" ]; then
+      info "Bare auth.uid() found in older migrations but fix migration exists: $(basename $FIX_MIGRATION)"
+    else
+      echo "$BARE_AUTH"
+      warning "Bare auth.uid() found in SQL — use (select auth.uid()) for performance" \
+        "Bare calls evaluate per-row; subselect caches per-query (100x+ faster)"
+    fi
   fi
   
   # Permissive grants to public/anon
@@ -272,20 +278,40 @@ if [ -f "package.json" ]; then
   if grep -q '"zod"\|"yup"\|"joi"\|"class-validator"\|"superstruct"\|"valibot"' package.json 2>/dev/null; then
     HAS_VALIDATION=1
     info "Input validation library found in dependencies"
-  else
-    warning "No input validation library detected (zod, yup, joi, etc.)" \
-      "Validate all user input at API boundaries"
   fi
+fi
+# Also check for Deno-style esm.sh imports (Supabase edge functions)
+if [ $HAS_VALIDATION -eq 0 ]; then
+  ESM_VALIDATION=$(grep -rn "esm.sh/zod\|esm.sh/yup\|esm.sh/joi\|esm.sh/valibot\|from.*['\"].*validate" --include='*.ts' --include='*.tsx' $SRC_DIRS 2>/dev/null | grep -v node_modules | head -1)
+  if [ -n "$ESM_VALIDATION" ]; then
+    HAS_VALIDATION=1
+    info "Input validation found via ESM/Deno imports"
+  fi
+fi
+if [ $HAS_VALIDATION -eq 0 ]; then
+  warning "No input validation library detected (zod, yup, joi, etc.)" \
+    "Validate all user input at API boundaries"
 fi
 
 # Check for rate limiting
+HAS_RATELIMIT=0
 if [ -f "package.json" ]; then
   if grep -q '"rate-limit\|"rateLimit\|"express-rate-limit\|"@upstash/ratelimit\|"limiter"' package.json 2>/dev/null; then
+    HAS_RATELIMIT=1
     info "Rate limiting library found in dependencies"
-  else
-    warning "No rate limiting library detected" \
-      "Add rate limiting to auth endpoints and API routes"
   fi
+fi
+# Also check for custom rate limiting implementations
+if [ $HAS_RATELIMIT -eq 0 ]; then
+  CUSTOM_RATELIMIT=$(grep -rn "rateLimit\|rate_limit\|checkRateLimit\|rateLimitResponse" --include='*.ts' --include='*.tsx' --include='*.js' $SRC_DIRS 2>/dev/null | grep -v node_modules | head -1)
+  if [ -n "$CUSTOM_RATELIMIT" ]; then
+    HAS_RATELIMIT=1
+    info "Custom rate limiting implementation found"
+  fi
+fi
+if [ $HAS_RATELIMIT -eq 0 ]; then
+  warning "No rate limiting library detected" \
+    "Add rate limiting to auth endpoints and API routes"
 fi
 
 # Check for error monitoring
